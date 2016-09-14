@@ -1,0 +1,21 @@
+{
+  "name": "ola-dht",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dht.js",
+  "scripts": {
+  	"node1": "./node1.js -p 8081",
+    "node2": "./node2.js -p 8082",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/olamedia/ola-dht.git"
+  },
+  "author": "olamedia",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/olamedia/ola-dht/issues"
+  },
+  "homepage": "https://github.com/olamedia/ola-dht#readme"
+}
