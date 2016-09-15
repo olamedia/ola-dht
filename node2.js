@@ -3,7 +3,7 @@
 const peerInfo = require('./dht2.js').peerInfo;
 const peer = require('./dht2.js').peer;
 const tcpTransport = require('./dht2.js').tcpTransport;
-const dhtProtocol = require('./dht2.js').dhtProtocol;
+const dhtProtocol = require('./protocols/dhtProtocol.js');
 
 var argv = require('yargs')
 	.alias('p', 'port').string('p').describe('p', 'Port.').default('p', 8080)
