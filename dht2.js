@@ -1,6 +1,8 @@
 #!/usr/bin/node
 "use strict";
 
+const net = require('net');
+
 // remote peer required info:
 // host
 // port
@@ -12,34 +14,21 @@
 // peer ID (public key hash)
 //
 
-
-class protocol{
-	sendEvent(connection, event){
-	
-	}
-	receiveEvent(connection, event){
-		
-	}
-	receive(connection, data){
-		
-	}
-	send(connection, data){
-	
-	}
-}
-
 class peerConnection{
 	constructor(local, remote, transport, socket){
 		var self = this;
 		self.local = local; // local peer
 		self.isServer = false; // local is server
 		self.remote = remote; // remote peer info
+		self.transport = transport;
+		self.socket = socket;
+		self.rootProtocol = self.local.protocol.getRoot();
 	}
 	attachDataHandler(){
-		var self = this;
-		var protocol = self.local.protocol;
+		var connection = this;
+		//var protocol = self.local.protocol;
 		self.socket.on('data', (data) => {
-			protocol.receive(self, data);
+			connection.rootProtocol.receiveData(self, data);
 		});
 	}
 	attachHandlers(){
@@ -49,6 +38,26 @@ class peerConnection{
 		self.remote.socket.on('close', () => {
 			
 		});
+	}
+	receiveEvent(eventName, eventData){
+		var connection = this;
+		//console.log('peerConnection.receiveEvent from', connection.remote);
+		//var protocol = connection.local.protocol;
+		connection.rootProtocol.receiveEvent(connection, eventName, eventData);
+	}
+	receiveData(data){
+		var connection = this;
+		//console.error('peerConnection.receiveData');
+		connection.rootProtocol.receiveData(connection, data);
+	}
+	sendEvent(eventName, eventData){
+		// ???? not required
+		//var connection = this;
+		//connection.transport.sendEvent(data);
+	}
+	sendData(data){
+		var connection = this;
+		connection.transport.sendData(connection, data);
 	}
 }
 
@@ -70,10 +79,14 @@ class peer extends peerInfo{
 		var localPeer = this;
 		localPeer.transports.push(transport);
 	}
+	setProtocol(protocol){
+		var localPeer = this;
+		localPeer.protocol = protocol;
+	}
 	listen(resolve, reject){
 		var localPeer = this;
 		for (var k in localPeer.transports){
-			self.transports[k].listen(localPeer, resolve, reject);
+			localPeer.transports[k].listen(localPeer, resolve, reject);
 		}
 	}
 }
@@ -87,16 +100,24 @@ class tcpTransport{
 			self.port = port;
 		}
 	}
+	sendData(connection, data){
+		var socket = connection.socket;
+		socket.write(data, 'utf-8');
+		socket.end();
+	}
 	listen(localPeer, resolve, reject){
 		var transport = this;
 		var server = new net.Server({}); // events: close, connection, error, listening
 		server.on('connection', (socket) => {
+			socket.setEncoding('utf8');
 			console.log('incoming connection');
 			
-			remotePeer = new peerInfo(socket.remoteAddress, socket.remotePort);
+			var remotePeer = new peerInfo(socket.remoteAddress, socket.remotePort);
 			var connection = new peerConnection(localPeer, remotePeer, transport, socket);
+			connection.isServer = true;
+			connection.receiveEvent('connection'); // FIXME
 			socket.on('data', (data) => {
-				connection.receive(data);
+				connection.receiveData(data);
 			});
 			//connection.attachDataHandler();
 			//connection.attachHandlers();
@@ -111,7 +132,7 @@ class tcpTransport{
 			port: transport.port
 		}, () => {
 			transport.port = server.address().port;
-			console.log('tcpTransport Listening at ' + self.port);
+			console.log('tcpTransport Listening at ' + transport.port);
 			//self.local = new peerInfo(host, server.address().port);
 			!resolve || resolve();
 		});
@@ -119,24 +140,19 @@ class tcpTransport{
 	dial(localPeer, remotePeer, resolve, reject){
 		var transport = this;
 		try{
-			var socket = new net.Socket({});
+			var socket = new net.Socket({}); // events: close, connect, data, drain, end, error, lookup, timeout
 			socket.setEncoding('utf8');
 			//remotePeer.socket = socket;
 			var connection = new peerConnection(localPeer, remotePeer, transport, socket);
 			socket.on('data', (data) => {
-				connection.receive(data);
+				connection.receiveData(data);
 			});
-			//connection.attachHandlers();
-			
-			
-			
 			var isResolved = false;
-			remoteTransport.tcpSocket.on('close', () => {
-				remoteTransport.tcpSocket = null;
+			socket.on('close', () => {
 				if (isResolved){
-					remoteTransport.peer.emit('close', {});
+					connection.receiveEvent('close');
 				}else{
-					reject();
+					!reject || reject();
 				}
 			});
 			socket.connect({
@@ -148,16 +164,9 @@ class tcpTransport{
 				//hints: //dns.lookup() hints. Defaults to 0.
 				//lookup: //Custom lookup function. Defaults to dns.lookup.
 			}, () => {
-				remoteTransport._peer.trigger({
-					name: 'connected',
-					host: remoteTransport.tcpSocket.remoteAddress,
-					family: remoteTransport.tcpSocket.remoteFamily,
-					port: remoteTransport.tcpSocket.remotePort,
-				});
 				isResolved = true;
-				remoteTransport.host = remoteTransport.tcpSocket.remoteAddress
-				remoteTransport.tcpSocket.unref(); // let exit even if connected
-				resolve(remoteTransport);
+				connection.receiveEvent('connect'); // FIXME
+				!resolve || resolve();
 			});
 		}catch(e){
 			console.trace(e);
@@ -166,20 +175,30 @@ class tcpTransport{
 }
 
 
+module.exports = {
+	peerInfo: peerInfo,
+	peer: peer,
+	tcpTransport: tcpTransport,
+	//dhtProtocol: dhtProtocol
+};
 
 
 
 
-
-var node = new peer();
+/*var node = new peer();
 var tcp = new tcpTransport();
 //if (port){
 //	tcp.port = port;
 //}
 node.addTransport(tcp);
+
+var dht = new dhtProtocol();
+node.setProtocol(dht);
 node.listen();
 
-
+console.dir(node);*/
+// var remotePeer = new peerInfo('127.0.0.1', 8080);
+// tcp.dial(node, remotePeer, () => { console.log('connected') });
 
 
 
